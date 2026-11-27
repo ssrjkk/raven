@@ -84,12 +84,12 @@ jobs:
 
             $fontPath = Join-Path $env:RUNNER_TEMP "raven-font.woff2"
             $font = Invoke-WebRequest -Uri "http://127.0.0.1:18889/fonts/IBMPlexSans-latin.woff2" -OutFile $fontPath -UseBasicParsing
-            if ($font.Headers["Content-Type"] -notlike "font/woff2*") { throw "WOFF2 MIME type is wrong: $($font.Headers['Content-Type'])" }
+            if ($font.BaseResponse.ContentType -notlike "font/woff2*") { throw "WOFF2 MIME type is wrong: $($font.BaseResponse.ContentType)" }
             $magic = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($fontPath), 0, 4)
             if ($magic -ne "wOF2") { throw "Font route returned non-font content" }
 
             $sw = Invoke-WebRequest -Uri "http://127.0.0.1:18889/sw.js" -UseBasicParsing
-            if ($sw.Headers["Content-Type"] -notlike "text/javascript*") { throw "Service worker MIME type is wrong" }
+            if ($sw.BaseResponse.ContentType -notlike "text/javascript*") { throw "Service worker MIME type is wrong: $($sw.BaseResponse.ContentType)" }
             $manifest = Invoke-RestMethod -Uri "http://127.0.0.1:18889/manifest.json"
             if ($manifest.name -ne "Raven") { throw "Manifest route returned wrong content" }
           } finally {

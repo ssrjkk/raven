@@ -65,7 +65,7 @@ def main() -> int:
     if args.help:
         print(
             "usage: Raven.exe [--port PORT] [--no-browser] [--ghost]\n\n"
-            "Raven Desktop — gateway + web UI\n\n"
+            "Raven Desktop - gateway + web UI\n\n"
             "options:\n"
             "  --port PORT     Web UI port (default: 18888)\n"
             "  --no-browser    Do not auto-open the browser\n"
