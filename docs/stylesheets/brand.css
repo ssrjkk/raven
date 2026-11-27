@@ -73,11 +73,11 @@
   --md-default-bg-color: var(--bg);
   --md-default-fg-color: var(--ink);
   --md-default-fg-color--light: var(--muted);
-  --md-primary-fg-color: var(--bg-panel);
+  --md-primary-fg-color: #0a0812;
   --md-primary-bg-color: var(--ink);
   --md-accent-fg-color: var(--accent-text);
   --md-accent-bg-color: var(--accent-surface);
-  --md-typeset-a-color: var(--accent-text);
+  --md-typeset-a-color: #7c3aed;
   --md-code-bg-color: var(--bg-card);
   --md-code-fg-color: var(--ink);
   --md-footer-bg-color: var(--bg-panel);
