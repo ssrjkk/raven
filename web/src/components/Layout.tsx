@@ -42,7 +42,7 @@ import {
   Wallet,
   Workflow,
 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { version } from "../../package.json";
