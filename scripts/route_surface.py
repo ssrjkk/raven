@@ -20,7 +20,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from fastapi import APIRouter
 
 from raven.core.ab_testing_api import create_ab_testing_router
-from raven.core.admin_api import create_admin_router
+from raven.core.admin_api import create_admin_router, create_oauth_router
 from raven.core.analytics_api import create_analytics_router
 from raven.core.auth.rbac import rbac
 from raven.core.browser_api import create_browser_router
@@ -109,6 +109,7 @@ def gateway_routers() -> dict[str, Any]:
     return {
         "webhook_router": create_webhook_router(db, _noop),
         "admin_router": create_admin_router(lambda: {}, lambda: {}, lambda: None),
+        "create_oauth_router()": create_oauth_router(),
         "git_router": create_git_router(),
         "github_router": create_github_router(),
         "get_aios_adapter().get_bridge_router()": _bridge_router(),

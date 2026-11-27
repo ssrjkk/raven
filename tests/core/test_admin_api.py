@@ -155,7 +155,7 @@ def _first_body_chunk(app: FastAPI, path: str) -> str:
 
 
 def _make_client(gateway, registry, channels, role: str | None = None) -> TestClient:
-    from raven.core.admin_api import create_admin_router
+    from raven.core.admin_api import create_admin_router, create_oauth_router
 
     app = FastAPI()
     state = {"user_role": role, "user_id": "admin1"} if role else {}
@@ -167,6 +167,7 @@ def _make_client(gateway, registry, channels, role: str | None = None) -> TestCl
             lambda: gateway,
         )
     )
+    app.include_router(create_oauth_router())
     return TestClient(app)
 
 
@@ -438,7 +439,7 @@ class TestSystem:
         monkeypatch.setattr(oauth_mod, "handle_callback", fake_callback)
         monkeypatch.setattr(tokens_mod.token_manager, "create_token", AsyncMock(return_value="tok-123"))
         client = _make_client(gateway, registry, channels)
-        resp = client.post("/api/admin/auth/oauth/callback/github", json={"code": "c", "state": "s"})
+        resp = client.post("/api/auth/oauth/callback/github", json={"code": "c", "state": "s"})
         assert resp.status_code == 200
         assert resp.json()["token"] == "tok-123"
 
@@ -459,7 +460,7 @@ class TestSystem:
         monkeypatch.setattr(tokens_mod.token_manager, "create_token", AsyncMock(return_value="tok-gh"))
         monkeypatch.setattr(secrets, "set", fake_set)
         client = _make_client(gateway, registry, channels)
-        resp = client.post("/api/admin/auth/oauth/callback/github", json={"code": "c", "state": "s"})
+        resp = client.post("/api/auth/oauth/callback/github", json={"code": "c", "state": "s"})
         assert resp.status_code == 200
         assert recorded == {"github_oauth_token": "gh-token"}
         assert "access_token" not in resp.json()
@@ -472,7 +473,7 @@ class TestSystem:
 
         monkeypatch.setattr(oauth_mod, "handle_callback", fake_callback)
         client = _make_client(gateway, registry, channels)
-        resp = client.post("/api/admin/auth/oauth/callback/github", json={"code": "c", "state": "s"})
+        resp = client.post("/api/auth/oauth/callback/github", json={"code": "c", "state": "s"})
         assert resp.status_code == 401
 
     def test_logs_stream_heartbeat(self, gateway, registry, channels) -> None:
@@ -762,13 +763,13 @@ class TestTheGuardAnswersThePermissionTable:
 class TestOAuth:
     def test_providers_endpoint(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)
-        resp = client.get("/api/admin/auth/oauth/providers")
+        resp = client.get("/api/auth/oauth/providers")
         assert resp.status_code == 200
         assert "providers" in resp.json()
 
     def test_authorize_unknown_provider_400(self, gateway, registry, channels) -> None:
         client = _make_client(gateway, registry, channels)
-        resp = client.get("/api/admin/auth/oauth/authorize/nope")
+        resp = client.get("/api/auth/oauth/authorize/nope")
         assert resp.status_code == 400
 
     def test_authorize_enabled_provider(self, gateway, registry, channels, monkeypatch) -> None:
@@ -776,7 +777,7 @@ class TestOAuth:
 
         monkeypatch.setattr(oauth_mod, "get_authorize_url", lambda p, u: f"https://auth.example/{p}")
         client = _make_client(gateway, registry, channels)
-        resp = client.get("/api/admin/auth/oauth/authorize/github")
+        resp = client.get("/api/auth/oauth/authorize/github")
         assert resp.status_code == 200
         assert "url" in resp.json()
 
