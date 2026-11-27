@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider, useTheme } from "./ThemeContext";
 
@@ -32,6 +32,13 @@ describe("ThemeContext", () => {
     renderProbe();
     expect(screen.getByTestId("theme").textContent).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("keeps the landing-matched dark default even on a light system", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    renderProbe();
+    expect(screen.getByTestId("theme").textContent).toBe("dark");
+    vi.restoreAllMocks();
   });
 
   it("cycles dark -> light -> midnight -> dark", async () => {

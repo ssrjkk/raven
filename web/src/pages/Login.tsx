@@ -17,6 +17,10 @@ export default function Login() {
   const oauthHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
 
   useEffect(() => {
+    document.title = isRegister ? "Create an account — Raven" : "Sign in — Raven";
+  }, [isRegister]);
+
+  useEffect(() => {
     return () => {
       if (oauthHandlerRef.current) {
         window.removeEventListener("message", oauthHandlerRef.current);

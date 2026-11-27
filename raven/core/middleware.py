@@ -127,6 +127,8 @@ PUBLIC_READ_PREFIXES: tuple[str, ...] = (
     # The container healthcheck is `curl -f http://localhost:18888/api/health` with no credential
     # to send (`raven/cli/deploy_cmd.py`), and liveness/readiness ride the same prefix.
     "/api/health",
+    # OAuth provider discovery and authorization start before a session exists.
+    "/api/auth/oauth/",
     # Meta's webhook verification handshake: a `GET ?hub.challenge=…` from its servers, which carry
     # the per-subscription verify token in the query string rather than a Raven credential.
     "/api/webhooks/whatsapp",

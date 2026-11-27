@@ -39,6 +39,40 @@ class TestMountSpa:
         result = mount_spa(app, web_dist)
         assert result is True
 
+    def test_serves_root_static_files_with_their_real_content_type(self, tmp_path: Path):
+        app = FastAPI()
+        web_dist = tmp_path / "dist"
+        web_dist.mkdir()
+        (web_dist / "index.html").write_text("<html><body>Test</body></html>")
+        (web_dist / "fonts").mkdir()
+        (web_dist / "fonts" / "test.woff2").write_bytes(b"wOF2test-font")
+        (web_dist / "sw.js").write_text("self.addEventListener('install', () => {});")
+        (web_dist / "manifest.json").write_text('{"name":"Raven"}')
+
+        mount_spa(app, web_dist)
+        client = TestClient(app)
+
+        font = client.get("/fonts/test.woff2")
+        assert font.status_code == 200
+        assert font.content == b"wOF2test-font"
+        assert font.headers["content-type"].startswith("font/woff2")
+        assert client.get("/sw.js").headers["content-type"].startswith("text/javascript")
+        assert client.get("/manifest.json").json() == {"name": "Raven"}
+
+    def test_spa_fallback_does_not_escape_the_dist_directory(self, tmp_path: Path):
+        app = FastAPI()
+        web_dist = tmp_path / "dist"
+        web_dist.mkdir()
+        (web_dist / "index.html").write_text("<html><body>Test</body></html>")
+        (tmp_path / "secret.txt").write_text("secret")
+
+        mount_spa(app, web_dist)
+        response = TestClient(app).get("/../secret.txt")
+
+        assert response.status_code == 200
+        assert "secret" not in response.text
+        assert "Test" in response.text
+
     def test_spa_fallback_returns_index(self, tmp_path: Path):
         app = FastAPI()
         web_dist = tmp_path / "dist"

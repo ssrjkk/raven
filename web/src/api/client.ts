@@ -167,11 +167,11 @@ export const api = {
     request<{ ok?: boolean; error?: string }>(`/api/plugins/update/${encodeURIComponent(name)}`, { method: "POST" }),
   pluginsTop: (limit = 10) => request<PluginInfo[]>(`/api/plugins/top?limit=${limit}`),
 
-  oauthProviders: () => request<{ providers: OAuthProviderInfo[] }>("/api/admin/auth/oauth/providers"),
+  oauthProviders: () => request<{ providers: OAuthProviderInfo[] }>("/api/auth/oauth/providers"),
   oauthAuthorize: (provider: string, redirectUri = "") =>
-    request<{ url: string }>(`/api/admin/auth/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`),
+    request<{ url: string }>(`/api/auth/oauth/authorize/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}`),
   oauthCallback: (provider: string, code: string, state: string) =>
-    request<{ token: string; user: { id: string; role: string } }>(`/api/admin/auth/oauth/callback/${provider}`, { method: "POST", body: JSON.stringify({ code, state }) }),
+    request<{ token: string; user: { id: string; role: string } }>(`/api/auth/oauth/callback/${provider}`, { method: "POST", body: JSON.stringify({ code, state }) }),
 
   patternChecks: () => request<PatternCheckInfo[]>("/api/v1/patterns/checks"),
   patternRun: (file?: string, checkIds?: string) => request<PatternRunResponse>(`/api/v1/patterns/run${file ? `?file=${encodeURIComponent(file)}` : ""}${checkIds ? `${file ? "&" : "?"}check_ids=${encodeURIComponent(checkIds)}` : ""}`),

@@ -10,6 +10,7 @@ vi.mock("../api/client", () => ({
   api: {
     login: vi.fn().mockResolvedValue({ token: "test-token", user: { id: "1", role: "user" } }),
     register: vi.fn().mockResolvedValue({ token: "test-token", user: { id: "1", role: "user" } }),
+    oauthProviders: vi.fn().mockResolvedValue({ providers: [] }),
   },
   setToken: vi.fn(),
   isAuthenticated: vi.fn().mockReturnValue(false),
@@ -24,6 +25,7 @@ describe("Login Page", () => {
     renderLogin();
     expect(screen.getByText("Sign in to your account")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    expect(document.title).toBe("Sign in — Raven");
   });
 
   it("shows username and password fields", () => {
@@ -38,6 +40,7 @@ describe("Login Page", () => {
     await userEvent.click(toggle);
     expect(screen.getByText("Create an account")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /register/i })).toBeInTheDocument();
+    expect(document.title).toBe("Create an account — Raven");
   });
 
   it("disables submit while loading", async () => {

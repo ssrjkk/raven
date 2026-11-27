@@ -177,6 +177,10 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
+  useEffect(() => {
+    document.title = "Raven — Console";
+  }, [location.pathname]);
+
   function handleLogout() {
     clearToken();
     navigate("/login");
