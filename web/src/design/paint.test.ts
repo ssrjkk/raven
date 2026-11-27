@@ -25,7 +25,7 @@ describe("labelOn", () => {
   });
 
   it("always clears AA against the fill it was asked about", () => {
-    for (const fill of ["#7c3aed", "#eab308", "#22c55e", "#d946ef", "#059db6", "#0f1117", "#f6f7fb"]) {
+    for (const fill of ["#7c3aed", "#eab308", "#22c55e", "#d946ef", "#059db6", "#0a0812", "#f7f5fb"]) {
       expect(contrastRatio(labelOn(fill), fill)).toBeGreaterThanOrEqual(4.5);
     }
   });

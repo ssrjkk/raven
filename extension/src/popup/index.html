@@ -3,13 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Raven AI</title>
+  <title>Raven</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <header>
-    <span class="mark" aria-hidden="true">🐦</span>
-    <span class="name">Raven AI</span>
+    <svg class="mark" width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#0a0812"/>
+      <path d="M16 6 7 16l9 10 4-4.6V17h5v-2h-5v-6.4z" fill="#8b5cf6"/>
+      <path d="M16 11.5 11.5 16 16 20.5l1.9-2.2V17H20v-2h-2.1v-1.3z" fill="#d946ef"/>
+    </svg>
+    <span class="name">Raven</span>
     <button id="gear" type="button" class="ghost" aria-label="Connection settings">settings</button>
     <span id="status" class="dot" title="not connected">○</span>
   </header>

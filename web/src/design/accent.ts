@@ -69,18 +69,18 @@ const WHITE = "#ffffff";
 /** The page background of each theme: the accent is measured against a surface, not in the abstract.
  * Single source for ThemeContext's meta theme-color as well, so the two cannot drift apart. */
 export const THEME_BACKGROUND: Record<AccentTheme, string> = {
-  dark: "#0f1117",
-  light: "#f6f7fb",
-  midnight: "#050507",
+  dark: "#0a0812",
+  light: "#f7f5fb",
+  midnight: "#050407",
 };
 
 /** The panel a card or input border is drawn on. Focus and hover borders are measured against this
  * rather than the page: every interactive surface in the app sits on a card, and the card is the
  * lighter of the two in dark, so it is the stricter of the two requirements. */
 export const THEME_CARD: Record<AccentTheme, string> = {
-  dark: "#1e2140",
+  dark: "#161221",
   light: "#ffffff",
-  midnight: "#0e0e14",
+  midnight: "#120e1a",
 };
 
 /**

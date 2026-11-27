@@ -29,7 +29,7 @@ function renderLayout(route = "/") {
 describe("Layout", () => {
   it("renders sidebar with brand", () => {
     renderLayout();
-    expect(screen.getAllByText("Raven AI").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Raven").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders all navigation items", () => {
@@ -53,7 +53,7 @@ describe("Layout", () => {
 
   it("renders version badge", () => {
     renderLayout();
-    expect(screen.getByText(`Raven AI v${version} · by ssrjkk`)).toBeInTheDocument();
+    expect(screen.getByText(`Raven v${version} · by ssrjkk`)).toBeInTheDocument();
   });
 
   it("renders outlet content", () => {

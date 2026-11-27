@@ -51,8 +51,8 @@ describe("Login Page", () => {
     expect(button).toBeDisabled();
   });
 
-  it("renders Raven AI heading", () => {
+  it("renders Raven heading", () => {
     renderLogin();
-    expect(screen.getByText("Raven AI")).toBeInTheDocument();
+    expect(screen.getByText("Raven")).toBeInTheDocument();
   });
 });

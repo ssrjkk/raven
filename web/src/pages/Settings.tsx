@@ -56,7 +56,7 @@ export default function Settings() {
 
   const shutdown = useMutation({
     mutationFn: () => {
-      if (!window.confirm("Shutdown Raven AI? This will stop the server.")) {
+      if (!window.confirm("Shutdown Raven? This will stop the server.")) {
         return Promise.reject(new Error("cancelled"));
       }
       return api.shutdown();

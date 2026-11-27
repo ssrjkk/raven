@@ -231,7 +231,7 @@ export default function Layout() {
             R
           </div>
           <div className="min-w-0">
-            <h1 className="text-base font-bold leading-tight tracking-tight">Raven AI</h1>
+            <h1 className="text-base font-bold leading-tight tracking-tight">Raven</h1>
             <span className="text-[10px] text-tertiary">command & control</span>
           </div>
           <button
@@ -309,7 +309,7 @@ export default function Layout() {
             {revoking ? "Revoking…" : "Logout everywhere"}
           </button>
           <div className="text-[10px] text-center" style={{ color: "var(--dt-colors-border-hover)" }}>
-            Raven AI v{version} · by ssrjkk
+            Raven v{version} · by ssrjkk
           </div>
         </div>
       </aside>
@@ -323,7 +323,7 @@ export default function Layout() {
           >
             ☰
           </button>
-          <span className="text-sm font-semibold">Raven AI</span>
+          <span className="text-sm font-semibold">Raven</span>
         </div>
         <div className="max-w-6xl mx-auto p-4 md:p-6">
           <AnimatePresence mode="wait">

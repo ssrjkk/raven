@@ -1,4 +1,4 @@
-const CACHE = "raven-v2";
+const CACHE = "raven-v3";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -58,7 +58,7 @@ async function cacheFirstWithOffline(request) {
     const offline = await caches.match("/offline.html");
     if (offline) return offline;
     return new Response(
-      "<html><body style='background:#0f1117;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif'><div><h1>Offline</h1><p>Connect to the internet to use Raven AI.</p></div></body></html>",
+      "<html><body style='background:#0a0812;color:#eceaf4;display:grid;place-items:center;min-height:100vh;font-family:system-ui,sans-serif;text-align:center'><div><h1>Offline</h1><p style='color:#b4adc6'>Connect to the internet to use Raven.</p></div></body></html>",
       { status: 503, headers: { "Content-Type": "text/html;charset=UTF-8" } }
     );
   }
@@ -85,7 +85,7 @@ async function networkFirstWithApiCache(request) {
 // ── Push Notifications ──────────────────────────────────────────
 
 self.addEventListener("push", (event) => {
-  let data = { title: "Raven AI", body: "New notification", url: "/" };
+  let data = { title: "Raven", body: "New notification", url: "/" };
   if (event.data) {
     try {
       data = Object.assign(data, event.data.json());

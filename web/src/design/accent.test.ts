@@ -73,8 +73,10 @@ describe("accent palette generation", () => {
     expect(drift, `${preset.name} drifted to ${generated.default}`).toBeLessThan(1);
   });
 
-  it("does not darken the brand default, which already passes", () => {
-    expect(generateAccentPalette("#7c3aed", "dark").default).toBe("#7c3aed");
+  it("keeps the site violet readable on white button labels", () => {
+    const palette = generateAccentPalette("#8b5cf6", "dark");
+    expect(palette.default).not.toBe("#8b5cf6");
+    expect(contrastRatio(WHITE, palette.default)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("brightens a link on a dark page instead of darkening it", () => {
