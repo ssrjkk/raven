@@ -13,7 +13,7 @@ RUN npm run build
 # hatchling builds the wheel from the build context alone: a package it is asked for is a hard error
 # when the context does not have it, so every directory in pyproject `packages` and `force-include`
 # has to be copied here.
-FROM python:3.12-slim AS wheel-builder
+FROM python:3.15-slim AS wheel-builder
 ARG RAVEN_VERSION
 WORKDIR /build
 COPY pyproject.toml README.md ./
@@ -24,7 +24,7 @@ COPY policy/ policy/
 RUN pip install --no-cache-dir build \
     && python -m build --wheel
 
-FROM python:3.12-slim AS base
+FROM python:3.15-slim AS base
 # curl is for the healthcheck only. Chromium's shared libraries used to be installed here for
 # the optional `browser` extra, which nothing in the image installs; add them back together
 # with `pip install "raven-agent[browser]" && playwright install chromium` if that changes.
