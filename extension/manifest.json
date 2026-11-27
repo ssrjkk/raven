@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Raven AI",
+  "name": "Raven",
   "author": "ssrjkk",
   "version": "0.4.8",
-  "description": "Your personal AI assistant — right in your browser",
+  "description": "Raven self-hosted MCP gateway controls in your browser",
   "permissions": ["storage", "sidePanel"],
   "side_panel": {
     "default_path": "src/popup/index.html"
   },
   "action": {
-    "default_title": "Raven AI",
+    "default_title": "Raven",
     "default_popup": "src/popup/index.html"
   },
   "background": {

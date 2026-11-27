@@ -312,7 +312,7 @@ def _write_env(model: str, env_path: Path | None = None) -> Path:
     tiers = _tier_models_for(model)
     if not path.exists():
         path.write_text(
-            "# Raven AI — local configuration.\n"
+            "# Raven — local configuration.\n"
             "# The ollama/ prefix on a model name is what selects the provider; there is no separate switch.\n",
             encoding="utf-8",
         )

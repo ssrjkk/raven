@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "🐦 Raven AI — Docker Launch"
+echo "🐦 Raven — Docker Launch"
 echo "=========================="
 
 cd "$(dirname "$0")/.."
@@ -13,4 +13,4 @@ if [ ! -f .env ]; then
 fi
 
 docker compose -f deploy/docker-compose.yml up --build -d
-echo "✅ Raven AI running at http://localhost:18888"
+echo "✅ Raven running at http://localhost:18888"

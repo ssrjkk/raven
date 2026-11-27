@@ -104,7 +104,7 @@ class EmailChannel(BaseChannel):
             msg = MIMEMultipart()
             msg["From"] = cfg.smtp_user
             msg["To"] = to_addr
-            msg["Subject"] = "Re: Raven AI"
+            msg["Subject"] = "Re: Raven"
             msg.attach(MIMEText(message.content or "", "plain"))
             await aiosmtplib.send(
                 msg,

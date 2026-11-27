@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getConfig } from './config';
 
-const TERMINAL_NAME = 'Raven AI';
+const TERMINAL_NAME = 'Raven';
 
 function getOrCreateTerminal(): vscode.Terminal {
   const existing = vscode.window.terminals.find(t => t.name === TERMINAL_NAME);

@@ -22,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
   // ── Status bar ──────────────────────────────────────────
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.text = '$(hubot) Raven';
-  statusBarItem.tooltip = 'Raven AI — Click to open chat';
+  statusBarItem.tooltip = 'Raven — Click to open chat';
   statusBarItem.command = 'raven.chat';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
@@ -96,14 +96,14 @@ export function activate(context: vscode.ExtensionContext) {
   // ── Health polling ─────────────────────────────────────
   healthTimer = setInterval(() => updateHealthStatus(api), 30000);
 
-  console.log('Raven AI extension activated');
+  console.log('Raven extension activated');
 }
 
 export function deactivate() {
   panel?.dispose();
   if (healthTimer) clearInterval(healthTimer);
   getDiagnosticCollection().dispose();
-  console.log('Raven AI extension deactivated');
+  console.log('Raven extension deactivated');
 }
 
 async function updateHealthStatus(api: RavenApi) {
@@ -111,11 +111,11 @@ async function updateHealthStatus(api: RavenApi) {
   try {
     const ok = await api.health();
     statusBarItem.text = ok ? '$(hubot) Raven' : '$(hubot) Raven (offline)';
-    statusBarItem.tooltip = ok ? 'Raven AI — Connected' : 'Raven AI — Gateway not running. Click to start.';
+    statusBarItem.tooltip = ok ? 'Raven — Connected' : 'Raven — Gateway not running. Click to start.';
     statusBarItem.backgroundColor = ok ? undefined : new vscode.ThemeColor('statusBarItem.warningBackground');
   } catch {
     statusBarItem.text = '$(hubot) Raven (offline)';
-    statusBarItem.tooltip = 'Raven AI — Gateway not running. Click to start.';
+    statusBarItem.tooltip = 'Raven — Gateway not running. Click to start.';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   }
 }
@@ -155,7 +155,7 @@ async function showStatus(api: RavenApi, context: vscode.ExtensionContext) {
     { label: '$(play) Start Gateway', description: 'Start Raven gateway' },
     { label: '$(stop) Stop Gateway', description: 'Stop Raven gateway' },
   ];
-  const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Raven AI Status' });
+  const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Raven Status' });
   if (!pick) return;
   if (pick.label.includes('Gateway token')) await setGatewayToken(context);
   else if (pick.label.includes('REPL')) openRepl();

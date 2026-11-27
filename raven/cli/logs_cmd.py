@@ -55,7 +55,7 @@ def _render_line(line: str) -> tuple[str, str] | None:
 @click.option("--level", "-l", default="DEBUG", help="Minimum log level (DEBUG, INFO, WARNING, ERROR)")
 @click.option("--follow", "-f", is_flag=True, help="Follow log output")
 def logs(lines: int, level: str, follow: bool):
-    """View Raven AI logs"""
+    """View Raven logs"""
     log_path = settings.resolved_log_file
     if not log_path.exists():
         console.print("[red]No log file found. Set LOG_FILE or run 'raven start' first.[/red]")

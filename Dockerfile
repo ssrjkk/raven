@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools
 
 FROM base
 ARG RAVEN_VERSION
-LABEL org.opencontainers.image.title="Raven AI" \
+LABEL org.opencontainers.image.title="Raven" \
       org.opencontainers.image.description="Personal AI assistant: coding agent, workflow gateway and web dashboard" \
       org.opencontainers.image.version=$RAVEN_VERSION \
       org.opencontainers.image.authors="ssrjkk (https://github.com/ssrjkk)" \

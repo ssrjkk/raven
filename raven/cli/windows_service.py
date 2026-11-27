@@ -32,8 +32,8 @@ except ImportError as exc:
     _PYWIN32_ERROR = str(exc)
 
 SERVICE_NAME = "RavenAI"
-SERVICE_DISPLAY_NAME = "Raven AI Gateway"
-SERVICE_DESCRIPTION = "Runs the Raven AI gateway: channels, tools, routines and the web API."
+SERVICE_DISPLAY_NAME = "Raven Gateway"
+SERVICE_DESCRIPTION = "Runs the Raven gateway: channels, tools, routines and the web API."
 
 # pywin32 stores this string in HKLM\...\Services\RavenAI\PythonClass and pythonservice.exe imports it,
 # so it has to name the module rather than `__main__`, which is what `python -m <module>` runs it as.

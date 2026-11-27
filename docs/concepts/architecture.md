@@ -8,7 +8,7 @@ _by [@ssrjkk](https://github.com/ssrjkk)_
 
 ## Overview
 
-Raven AI uses a **Gateway** architecture pattern:
+Raven uses a **Gateway** architecture pattern:
 
 ```
 [Channel] → [Gateway] → [Agent] → [LLM Provider]

@@ -17,7 +17,7 @@ from raven.core.channel_config import get_channel_config
 from raven.core.models import IncomingMessage, Message
 
 TELEGRAM_HELP = (
-    "Hello! I'm your Raven AI assistant.\n"
+    "Hello! I'm your Raven assistant.\n"
     "Send /help for the command list, or use the buttons below.\n"
     "Voice messages are transcribed automatically."
 )

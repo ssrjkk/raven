@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = "Stop"
 
-Write-Host "🐦 Raven AI — Docker Launch" -ForegroundColor Cyan
+Write-Host "🐦 Raven — Docker Launch" -ForegroundColor Cyan
 Write-Host "==========================" -ForegroundColor Cyan
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -13,4 +13,4 @@ if (-not (Test-Path ".env")) {
 }
 
 docker compose -f deploy/docker-compose.yml up --build -d
-Write-Host "✅ Raven AI running at http://localhost:18888" -ForegroundColor Green
+Write-Host "✅ Raven running at http://localhost:18888" -ForegroundColor Green

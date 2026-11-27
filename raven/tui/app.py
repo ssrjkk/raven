@@ -46,7 +46,7 @@ class DashboardScreen(Screen[Any]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Container():
-            yield Label("Raven AI Dashboard", classes="title")
+            yield Label("Raven Dashboard", classes="title")
             with Horizontal():
                 yield Static("Channels: 0", id="channels", classes="stat")
                 yield Static("Sessions: 0", id="sessions", classes="stat")
@@ -80,7 +80,7 @@ class DashboardScreen(Screen[Any]):
 
 
 class RavenTUI(App[Any]):
-    TITLE = "Raven AI"
+    TITLE = "Raven"
     SUB_TITLE = "v0.4.8 · by ssrjkk"
 
     SCREENS: ClassVar[dict[str, Callable[[], Screen[Any]]]] = {

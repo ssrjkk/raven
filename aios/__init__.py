@@ -1,7 +1,7 @@
 """
 AI-OS-MVP — Hybrid Architecture Integration Module
 
-Bridging Raven AI (Python) with:
+Bridging Raven (Python) with:
   - Next.js Web IDE (Monaco editor, Cursor-like)
   - Fastify AI Gateway (multi-model routing)
   - Tauri Desktop Shell (.exe)

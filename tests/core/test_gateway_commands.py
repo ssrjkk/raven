@@ -149,7 +149,7 @@ async def test_status_reports_channels_agents_skills(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(skills_registry, "list_names", lambda: ["s1", "s2"])
     assert await StatusCommand(gw).execute(_ctx()) is True
     _, _, msg = _sent(gw)
-    assert "Raven AI is running." in msg
+    assert "Raven is running." in msg
     assert "Channels: telegram, webchat" in msg
     assert "Agents: 3" in msg
     assert "Skills: 2" in msg

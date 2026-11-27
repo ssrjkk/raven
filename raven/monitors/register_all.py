@@ -9,7 +9,7 @@ from raven.core.monitor.models import Monitor, MonitorStatus, MonitorType
 async def register_all_monitors(engine: MonitorEngine):
     examples: list[dict[str, Any]] = [
         {
-            "name": "Raven AI Status",
+            "name": "Raven Status",
             "type": MonitorType.HTTP,
             "target": "https://status.github.com",
             "interval_seconds": 300,

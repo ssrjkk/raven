@@ -24,5 +24,5 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-WARNING}
       - RAVEN_ENV=production
     labels:
-      - "com.raven.description=Raven AI Production Instance"
+      - "com.raven.description=Raven Production Instance"
       - "com.raven.version=${RAVEN_VERSION:-0.4.8}"

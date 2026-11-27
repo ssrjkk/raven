@@ -16,7 +16,7 @@ raven [OPTIONS] COMMAND [ARGS]...
 
 ### `raven start`
 
-Start the Raven AI gateway.
+Start the Raven gateway.
 
 ```bash
 raven start [--daemon] [--port PORT] [--stateless]
@@ -104,7 +104,7 @@ raven service install|start|stop|status|remove|restart
 
 | Platform | What `install` does |
 | --- | --- |
-| Windows | Registers the service `RavenAI` ("Raven AI Gateway") as a `pywin32` service with automatic start. Needs the `service-win` extra (`pip install "raven[service-win]"`) and an elevated shell; `install` exits non-zero if either is missing. |
+| Windows | Registers the service `RavenAI` ("Raven Gateway") as a `pywin32` service with automatic start. Needs the `service-win` extra (`pip install "raven[service-win]"`) and an elevated shell; `install` exits non-zero if either is missing. |
 | Linux | Writes `/etc/systemd/system/raven.service`, then `daemon-reload`, `enable` and `start`. Needs root, e.g. `sudo raven service install`. |
 | macOS | Writes `~/Library/LaunchAgents/com.raven.ai.plist` and loads it with `launchctl`. |
 

@@ -32,7 +32,7 @@ jobs:
         working-directory: extension
         run: |
           mkdir -p dist
-          cp -r manifest.json src icons dist/
+          cp -r manifest.json src icons assets dist/
           cd dist && zip -r ../raven-extension.zip .
 
       - name: Upload artifact

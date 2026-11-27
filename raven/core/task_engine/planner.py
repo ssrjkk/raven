@@ -16,7 +16,7 @@ class PlanValidationError(ValueError):
 
 
 PLANNER_PROMPT = """\
-You are a task planner for the Raven AI assistant.
+You are a task planner for the Raven assistant.
 Given a user's goal and a list of available tools, decompose the goal into a sequence of steps.
 Each step must use ONE tool from the available list.
 

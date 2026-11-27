@@ -1,4 +1,4 @@
-site_name: Raven AI
+site_name: Raven
 site_author: ssrjkk
 copyright: Copyright &copy; 2026 by <a href="https://github.com/ssrjkk">ssrjkk</a>
 site_url: https://ssrjkk.github.io/raven/docs/
@@ -21,12 +21,15 @@ theme:
   name: material
   # Material loads Roboto from Google Fonts unless told otherwise, which hands every visitor's
   # IP address to another host. The product advertises a server you run yourself; the
-  # documentation has to hold that line too, so the theme's font fetch is off and the pages
-  # fall back to the reader's own system face.
+  # documentation has to hold that line too, so the theme's font fetch is off and brand.css
+  # loads the same self-hosted faces as the landing page.
   font: false
-  # No palette: key. Material's public build resolves only its own named schemes there — a hex
-  # is written to the page as a data attribute with no matching rule, and the theme falls back
-  # to its default indigo. The brand colors are set in stylesheets/brand.css instead.
+  palette:
+    - scheme: slate
+      primary: black
+      accent: purple
+  # The named Material scheme enables the dark page structure; exact brand colors and type
+  # are set in stylesheets/brand.css.
   features:
     - navigation.instant
     - navigation.tracking

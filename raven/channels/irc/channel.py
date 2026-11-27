@@ -55,7 +55,7 @@ class IRCChannel(EnterpriseChannel):
         self._port = 6697
         self._password = ""
         self._user = "raven-bot"
-        self._realname = "Raven AI"
+        self._realname = "Raven"
         self._tls = True
         self._channels_to_join: list[str] = []
         self._reader: asyncio.StreamReader | None = None

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Raven AI setup — by ssrjkk
+# Raven setup — by ssrjkk
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RAVEN_DIR="${RAVEN_DIR:-$HOME/.raven}"
 
-echo "🐦 Raven AI — Setup (by ssrjkk)"
+echo "🐦 Raven — Setup (by ssrjkk)"
 echo "=============================="
 
 echo ""

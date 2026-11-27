@@ -1,11 +1,11 @@
 #!/usr/bin/env pwsh
-# Raven AI setup — by ssrjkk
+# Raven setup — by ssrjkk
 $ErrorActionPreference = "Stop"
 
 $RavenDir = if ($env:RAVEN_DIR) { $env:RAVEN_DIR } else { "$HOME\.raven" }
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
-Write-Host "🐦 Raven AI — Setup (by ssrjkk)" -ForegroundColor Cyan
+Write-Host "🐦 Raven — Setup (by ssrjkk)" -ForegroundColor Cyan
 Write-Host "==============================" -ForegroundColor Cyan
 
 Write-Host "`n[1/5] Installing Python backend (editable + dev extras)..." -ForegroundColor Yellow

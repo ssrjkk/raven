@@ -1,5 +1,5 @@
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Raven AI extension installed");
+  console.log("Raven extension installed");
 });
 
 chrome.action.onClicked.addListener((tab) => {

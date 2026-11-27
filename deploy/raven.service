@@ -1,5 +1,5 @@
 [Unit]
-Description=Raven AI Personal Assistant
+Description=Raven Personal Assistant
 Documentation=https://github.com/raven-ai/raven
 After=network.target network-online.target
 Wants=network-online.target
