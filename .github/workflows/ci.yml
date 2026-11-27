@@ -165,7 +165,7 @@ jobs:
         run: npm ci
 
       - name: Install browsers
-        run: npx playwright install chromium
+        run: npx playwright install chromium firefox webkit
 
       # The specs drive `vite preview` over the built bundle (playwright.config.ts webServer), so this
       # job needs no gateway: every /api and /ws call is stubbed in web/e2e/support.ts. Before it, the
