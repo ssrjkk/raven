@@ -16,7 +16,7 @@ console = Console()
 
 @click.command()
 def upgrade():
-    """Update Raven AI to the latest version"""
+    """Update Raven to the latest version"""
     repo = Path(__file__).resolve().parent.parent.parent
     os.chdir(str(repo))
     console.print("[bold]Raven Upgrade[/bold]\n")

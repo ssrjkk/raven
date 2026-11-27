@@ -74,7 +74,7 @@ def _run_async(coro):
 )
 @click.pass_context
 def cli(ctx: click.Context):
-    """Raven AI — Personal AI Assistant 24/7"""
+    """Raven — Personal AI Assistant 24/7"""
     if ctx.invoked_subcommand is None:
         from raven.cli.coding import code
 
@@ -118,7 +118,7 @@ cli.add_command(_logs)
 @click.option("--stateless", is_flag=True, default=False, help="Run without memory/context persistence")
 @click.option("--ghost", is_flag=True, default=False, help="100% offline mode — local LLM, no external APIs")
 def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
-    """Start the Raven AI gateway"""
+    """Start the Raven gateway"""
     setup_logging()
     if daemon:
         if IS_WINDOWS:
@@ -156,12 +156,12 @@ def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
     if stateless:
         for agent_conf in gateway.registry._configs.values():
             agent_conf.stateless = True
-    title = "[bold blue]Raven AI[/bold blue]"
+    title = "[bold blue]Raven[/bold blue]"
     try:
-        title = "[bold blue]\U0001f426 Raven AI[/bold blue]"
+        title = "[bold blue]\U0001f426 Raven[/bold blue]"
         title.encode(sys.stdout.encoding or "utf-8")
     except (UnicodeEncodeError, UnicodeDecodeError):
-        title = "[bold blue]Raven AI[/bold blue]"
+        title = "[bold blue]Raven[/bold blue]"
     ghost_tag = " [bold yellow]👻 GHOST[/bold yellow]" if ghost else ""
     console.print(
         Panel.fit(
@@ -175,7 +175,7 @@ def start(daemon: bool, port: int | None, stateless: bool, ghost: bool):
 
 @cli.command()
 def stop():
-    """Stop the Raven AI gateway"""
+    """Stop the Raven gateway"""
     import httpx
 
     try:
@@ -210,7 +210,7 @@ def status():
         except Exception as e:
             logger.debug("Status health check failed: {}", e)
 
-        table = Table(title="Raven AI Status")
+        table = Table(title="Raven Status")
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="green")
         table.add_column("Details")
@@ -351,7 +351,7 @@ def repl(
 @click.option("--agent", "agent_id", default="default", help="Agent ID to use")
 @click.option("--channel", default="cli", help="Channel to simulate")
 def agent(message: str, agent_id: str, channel: str):
-    """Send a message to the Raven AI agent and get a response"""
+    """Send a message to the Raven agent and get a response"""
 
     async def _agent():
         db = DatabaseFactory.create()

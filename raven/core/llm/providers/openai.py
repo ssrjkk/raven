@@ -39,7 +39,7 @@ class OpenRouterProvider(LLMProvider):
             "Authorization": f"Bearer {self.api_key.get_secret_value()}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/raven-ai",
-            "X-Title": "Raven AI",
+            "X-Title": "Raven",
         }
 
     async def complete_stream(

@@ -34,7 +34,7 @@ def message_group():
 @click.option("--text", required=True, help="Message text")
 @click.option("--session", default=None, help="Session ID (optional)")
 def msg_send(channel: str, user: str, text: str, session: str | None):
-    """Send a message to a user via Raven AI"""
+    """Send a message to a user via Raven"""
 
     async def _send():
         db = DatabaseFactory.create()

@@ -1,6 +1,6 @@
 {
   "name": "raven-vscode",
-  "displayName": "Raven AI",
+  "displayName": "Raven",
   "description": "AI coding assistant — code review, edit, explain, and automate. Your pair programmer that never sleeps.",
   "version": "0.4.8",
   "publisher": "raven-ai",
@@ -68,12 +68,12 @@
       ]
     },
     "configuration": {
-      "title": "Raven AI",
+      "title": "Raven",
       "properties": {
         "raven.endpoint": {
           "type": "string",
           "default": "http://localhost:18888",
-          "description": "Raven AI API endpoint"
+          "description": "Raven API endpoint"
         },
         "raven.stateless": {
           "type": "boolean",

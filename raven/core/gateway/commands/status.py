@@ -14,7 +14,7 @@ class StatusCommand(CommandHandler):
         await gateway._send(
             ctx.event.channel,
             ctx.event.session_id,
-            f"Raven AI is running.\nChannels: {', '.join(channel_ids)}\n"
+            f"Raven is running.\nChannels: {', '.join(channel_ids)}\n"
             f"Agents: {len(gateway.registry.list_agents())}\n"
             f"Skills: {len(skills_registry.list_names())}",
         )

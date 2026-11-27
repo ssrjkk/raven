@@ -80,7 +80,7 @@ class TestWebChatChannel:
 
         from raven.channels.webchat.channel import INDEX_HTML
 
-        assert "Raven AI" in INDEX_HTML
+        assert "Raven" in INDEX_HTML
         # the page renders on a machine with no Node build: nothing may be fetched from another host
         assert not re.search(r'(?:src|href)\s*=\s*"\s*(?:https?:)?//', INDEX_HTML), "third-party subresource"
         # /ws closes 1008 without a token, which is what made the previous page unable to send a message

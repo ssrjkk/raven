@@ -49,7 +49,7 @@ Only a coroutine **defined in that `plugin.py`, under its own name** is publishe
 Function parameters become the tool's JSON schema from the type hints. A `*args` or `**kwargs` slot stays listed but is never required: a JSON tool call cannot fill it by name.
 
 ```python
-"""Weather plugin for Raven AI."""
+"""Weather plugin for Raven."""
 
 async def get_weather(city: str, units: str = "celsius") -> str:
     """Get current weather for a city.
@@ -256,7 +256,7 @@ This one is a **bundled** plugin — it imports `pathlib`, which a sandboxed use
 in `raven/plugins/file_search/`.
 
 ```python
-"""File search plugin for Raven AI."""
+"""File search plugin for Raven."""
 from pathlib import Path
 
 

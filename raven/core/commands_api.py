@@ -244,7 +244,7 @@ async def generate_theme_scheme(prompt: str, seed: str | None = None, use_llm: b
         if llm_palette is not None:
             palette = _complete_palette(palette, llm_palette)
     accent = palette["accent"]["default"]
-    name = f"AI · {prompt.strip()[:40]}" if prompt.strip() else "Raven AI"
+    name = f"AI · {prompt.strip()[:40]}" if prompt.strip() else "Raven"
     return ThemeScheme(
         name=name,
         description=prompt.strip() or "AI-generated color scheme",

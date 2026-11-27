@@ -242,7 +242,7 @@ def _plugin_posture_row() -> tuple[str, str]:
 @click.command()
 def doctor():
     """Diagnose configuration, dependencies, and service health"""
-    console.print(Panel.fit("[bold]Raven AI Doctor[/bold]"))
+    console.print(Panel.fit("[bold]Raven Doctor[/bold]"))
     checks: list[tuple[str, str | Text]] = []
 
     # What a start would read, not only what this terminal happened to export: the channel row below

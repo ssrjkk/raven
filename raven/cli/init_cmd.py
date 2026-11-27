@@ -43,7 +43,7 @@ RAVEN_JSON_TEMPLATE = """\
 """
 
 ENV_EXAMPLE_TEMPLATE = """\
-# Raven AI Configuration
+# Raven Configuration
 # Copy this file to .env and fill in your values. Every name below is one the
 # application reads; `raven doctor` reports what it actually resolved.
 

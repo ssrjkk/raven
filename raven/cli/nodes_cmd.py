@@ -9,7 +9,7 @@ console = Console()
 
 @click.group(name="nodes")
 def nodes_group():
-    """Manage Raven AI nodes (iOS/Android devices)"""
+    """Manage Raven nodes (iOS/Android devices)"""
 
 
 @nodes_group.command("list")

@@ -239,7 +239,7 @@ async def onboard() -> None:
     console.print(
         Panel.fit(
             Text.from_markup(
-                "[bold cyan]🐦 Raven AI[/bold cyan] [dim]v0.3.0[/dim]\n[green]Your 24/7 personal AI assistant[/green]"
+                "[bold cyan]🐦 Raven[/bold cyan] [dim]v0.3.0[/dim]\n[green]Your 24/7 personal AI assistant[/green]"
             ),
             border_style="cyan",
         )

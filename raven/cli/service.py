@@ -130,7 +130,7 @@ def _install_windows():
     if not _run_python(SERVICE_MODULE, "start"):
         console.print("[yellow]Installed, but the service did not start. Try: sc query RavenAI[/yellow]")
         sys.exit(1)
-    console.print("[green]Raven AI Windows service installed and started[/green]")
+    console.print("[green]Raven Windows service installed and started[/green]")
 
 
 # -- systemd (Linux) ----------------------------------------------------------
@@ -138,7 +138,7 @@ def _install_windows():
 
 SYSTEMD_SERVICE = textwrap.dedent("""\
     [Unit]
-    Description=Raven AI Service
+    Description=Raven Service
     After=network.target
 
     [Service]
@@ -174,7 +174,7 @@ def _install_systemd():
         _run_systemctl("daemon-reload")
         _run_systemctl("enable")
         _run_systemctl("start")
-        console.print(f"[green]Raven AI systemd service installed at {svc_path}[/green]")
+        console.print(f"[green]Raven systemd service installed at {svc_path}[/green]")
     except PermissionError:
         console.print("[red]Permission denied. Try: sudo raven service install[/red]")
         sys.exit(1)
@@ -187,7 +187,7 @@ def _uninstall_systemd():
     if svc_path.exists():
         svc_path.unlink()
     _run_systemctl("daemon-reload")
-    console.print("[green]Raven AI systemd service removed[/green]")
+    console.print("[green]Raven systemd service removed[/green]")
 
 
 # -- launchd (macOS) ----------------------------------------------------------
@@ -235,7 +235,7 @@ def _install_launchd():
     plist_path = plist_dir / "com.raven.ai.plist"
     plist_path.write_text(content, encoding="utf-8")
     _run_launchctl("load", str(plist_path))
-    console.print(f"[green]Raven AI launchd service installed at {plist_path}[/green]")
+    console.print(f"[green]Raven launchd service installed at {plist_path}[/green]")
 
 
 def _uninstall_launchd():
@@ -243,7 +243,7 @@ def _uninstall_launchd():
     if plist_path.exists():
         _run_launchctl("unload", str(plist_path))
         plist_path.unlink()
-    console.print("[green]Raven AI launchd service removed[/green]")
+    console.print("[green]Raven launchd service removed[/green]")
 
 
 # -- Helpers ------------------------------------------------------------------

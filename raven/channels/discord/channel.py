@@ -86,7 +86,7 @@ class DiscordChannel(BaseChannel):
             self._ready = True
             await tree.sync()
             logger.info("Discord channel started as {} ({} slash commands synced)", bot.user, len(tree.get_commands()))
-            await bot.change_presence(activity=discord.Game(name="/help | Raven AI"))
+            await bot.change_presence(activity=discord.Game(name="/help | Raven"))
 
         @self._bot.event
         async def on_message(msg: discord.Message):
@@ -163,7 +163,7 @@ class DiscordChannel(BaseChannel):
         @self._bot.command(name="status")
         async def status_cmd(ctx: commands.Context[commands.Bot]):
             embed = build_embed(
-                "Raven AI Status",
+                "Raven Status",
                 "Personal AI Assistant",
                 color="info",
                 fields=[("Channels", "12 registered", True), ("Status", "Running", True)],
@@ -348,7 +348,7 @@ class DiscordChannel(BaseChannel):
 
                     if metadata.get("as_embed"):
                         embed = build_embed(
-                            metadata.get("embed_title", "Raven AI"),
+                            metadata.get("embed_title", "Raven"),
                             content[:4096],
                             color=metadata.get("embed_color", "info"),
                         )

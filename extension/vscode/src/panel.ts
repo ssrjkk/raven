@@ -15,7 +15,7 @@ export class RavenPanel {
     }
     this._panel = vscode.window.createWebviewPanel(
       RavenPanel.viewType,
-      'Raven AI',
+      'Raven',
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [] },
     );
@@ -59,7 +59,7 @@ export class RavenPanel {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raven AI</title>
+<title>Raven</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #e4e4e7; display: flex; flex-direction: column; height: 100vh; }
@@ -92,7 +92,7 @@ export class RavenPanel {
 </head>
 <body>
 <div id="header">
-  <span>🐦</span><h1>Raven AI</h1>
+  <span>🐦</span><h1>Raven</h1>
   <span id="status" class="status waiting">connecting</span>
 </div>
 <div id="messages"></div>

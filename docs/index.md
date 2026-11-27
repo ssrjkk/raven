@@ -2,13 +2,13 @@
 description: "What Raven is: a self-hosted MCP server and channel gateway, its features, the quick start and the channels it speaks."
 ---
 
-# Raven AI
+# Raven
 
 _by [@ssrjkk](https://github.com/ssrjkk)_
 
-**Personal AI Assistant — Any Channel. Any Platform.**
+**Self-hosted MCP server and channel gateway.**
 
-Raven AI is a personal AI assistant you run on your own infrastructure. It connects to the messaging channels you already use — Telegram, Discord, Slack, WhatsApp, and more — and provides a unified AI-powered assistant experience.
+Raven runs on your own infrastructure. It exposes tools over stdio and HTTP JSON-RPC, connects messaging channels through a single gateway, and provides a focused web console for operating the system.
 
 ## Key Features
 

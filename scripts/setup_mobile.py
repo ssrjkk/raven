@@ -1,4 +1,4 @@
-"""Raven AI Mobile App Setup — Capacitor (iOS + Android)
+"""Raven Mobile App Setup — Capacitor (iOS + Android)
 
 Usage:
     python scripts/setup_mobile.py               # Install + init both platforms
@@ -38,7 +38,7 @@ def check_capacitor_config() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Setup Raven AI mobile app")
+    parser = argparse.ArgumentParser(description="Setup Raven mobile app")
     parser.add_argument("--ios", action="store_true", help="Init iOS platform")
     parser.add_argument("--android", action="store_true", help="Init Android platform")
     parser.add_argument("--skip-install", action="store_true", help="Skip npm install")
