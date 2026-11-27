@@ -360,3 +360,19 @@ jobs:
           pip freeze --exclude-editable > requirements-lock.txt
           pip install pip-audit
           python -m pip_audit --strict --no-deps -r requirements-lock.txt
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install docs dependencies
+        run: pip install "mkdocs-material==9.7.7" "mkdocstrings[python]==1.0.6"
+      - name: Build documentation
+        run: mkdocs build --strict
+      - name: Check documentation loads nothing off-site
+        run: python scripts/check_docs_offsite.py build/docs
