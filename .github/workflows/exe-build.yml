@@ -52,12 +52,52 @@ jobs:
       - name: Build EXE with PyInstaller
         run: python -m PyInstaller --noconfirm --clean --distpath packaging\dist --workpath packaging\build scripts/raven.spec
 
-      - name: Smoke test EXE (imports + helpers)
+      - name: Smoke test EXE (CLI + bundled web assets)
         run: |
-          if (-not (Test-Path "packaging\dist\Raven.exe")) { throw "Raven.exe not found" }
-          $size = (Get-Item "packaging\dist\Raven.exe").Length
+          $exe = Join-Path $PWD "packaging\dist\Raven.exe"
+          if (-not (Test-Path $exe)) { throw "Raven.exe not found" }
+          $size = (Get-Item $exe).Length
           Write-Host "Raven.exe size: $([math]::Round($size / 1MB, 1)) MB"
           if ($size -lt 10MB) { throw "Raven.exe too small, build likely failed" }
+
+          & $exe --help
+          if ($LASTEXITCODE -ne 0) { throw "Raven.exe --help failed" }
+
+          $dataDir = Join-Path $env:RUNNER_TEMP "raven-exe-smoke"
+          $env:RAVEN_DATA_DIR = $dataDir
+          $stdout = Join-Path $env:RUNNER_TEMP "raven-exe-smoke.out.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "raven-exe-smoke.err.log"
+          $process = Start-Process -FilePath $exe -ArgumentList "--no-browser", "--port", "18889" -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:18889/api/health" -TimeoutSec 2
+                if ($health.status) { $ready = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ready) {
+              Get-Content $stdout -ErrorAction SilentlyContinue
+              Get-Content $stderr -ErrorAction SilentlyContinue
+              throw "Raven gateway did not become ready"
+            }
+
+            $fontPath = Join-Path $env:RUNNER_TEMP "raven-font.woff2"
+            $fontHeaders = & curl.exe -sS -D - -o $fontPath "http://127.0.0.1:18889/fonts/IBMPlexSans-latin.woff2"
+            $fontType = ($fontHeaders | Select-String -Pattern '^Content-Type:' | Select-Object -First 1).Line
+            if ($fontType -notlike '*font/woff2*') { throw "WOFF2 MIME type is wrong: $fontType" }
+            $magic = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($fontPath), 0, 4)
+            if ($magic -ne "wOF2") { throw "Font route returned non-font content" }
+
+            $swPath = Join-Path $env:RUNNER_TEMP "raven-sw.js"
+            $swHeaders = & curl.exe -sS -D - -o $swPath "http://127.0.0.1:18889/sw.js"
+            $swType = ($swHeaders | Select-String -Pattern '^Content-Type:' | Select-Object -First 1).Line
+            if ($swType -notlike '*text/javascript*') { throw "Service worker MIME type is wrong: $swType" }
+            $manifest = Invoke-RestMethod -Uri "http://127.0.0.1:18889/manifest.json"
+            if ($manifest.name -ne "Raven") { throw "Manifest route returned wrong content" }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Write the SHA-256 checksum
         run: |

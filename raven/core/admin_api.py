@@ -53,6 +53,46 @@ class WorkflowStepsRequest(BaseModel):
     steps: list[StepInput]
 
 
+def create_oauth_router() -> APIRouter:
+    router = APIRouter(prefix="/api/auth/oauth", tags=["auth"])
+
+    @router.get("/providers")
+    def oauth_providers():
+        from raven.core.auth.oauth import get_enabled_providers
+
+        return {"providers": get_enabled_providers()}
+
+    @router.get("/authorize/{provider}")
+    def oauth_authorize(provider: str, redirect_uri: str = ""):
+        from raven.core.auth.oauth import get_authorize_url
+
+        base = settings.oauth_redirect_base
+        uri = redirect_uri or f"{base}/login"
+        url = get_authorize_url(provider, uri)
+        if not url:
+            raise HTTPException(400, f"OAuth provider '{provider}' not enabled")
+        return {"url": url}
+
+    @router.post("/callback/{provider}")
+    async def oauth_callback(provider: str, body: dict[str, str]):
+        from raven.core.auth.oauth import handle_callback
+
+        code = body.get("code", "")
+        state = body.get("state", "")
+        user_info = await handle_callback(provider, code, state)
+        if not user_info:
+            raise HTTPException(401, "OAuth authentication failed")
+        token = await token_manager.create_token(user_info["user_id"], "user")
+        if provider == "github" and user_info.get("access_token"):
+            access_token = user_info.pop("access_token")
+            gh_scope = user_info.pop("scope", "")
+            await secrets.set("github_oauth_token", access_token)
+            logger.info("Persisted GitHub OAuth token (scope: {})", gh_scope)
+        return {"token": token, **user_info}
+
+    return router
+
+
 def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
     # One model switch at a time. The handle is kept so the task cannot be garbage-collected mid-pull.
@@ -502,41 +542,6 @@ def create_admin_router(get_channels_fn, get_registry_fn, get_gateway_fn) -> API
                 await asyncio.sleep(1)
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-    @router.get("/auth/oauth/providers")
-    def oauth_providers():
-        from raven.core.auth.oauth import get_enabled_providers
-
-        return {"providers": get_enabled_providers()}
-
-    @router.get("/auth/oauth/authorize/{provider}")
-    def oauth_authorize(provider: str, redirect_uri: str = ""):
-        from raven.core.auth.oauth import get_authorize_url
-
-        base = settings.oauth_redirect_base
-        uri = redirect_uri or f"{base}/login"
-        url = get_authorize_url(provider, uri)
-        if not url:
-            raise HTTPException(400, f"OAuth provider '{provider}' not enabled")
-        return {"url": url}
-
-    @router.post("/auth/oauth/callback/{provider}")
-    async def oauth_callback(provider: str, body: dict[str, str]):
-        from raven.core.auth.oauth import handle_callback
-        from raven.core.auth.tokens import token_manager
-
-        code = body.get("code", "")
-        state = body.get("state", "")
-        user_info = await handle_callback(provider, code, state)
-        if not user_info:
-            raise HTTPException(401, "OAuth authentication failed")
-        token = await token_manager.create_token(user_info["user_id"], "user")
-        if provider == "github" and user_info.get("access_token"):
-            access_token = user_info.pop("access_token")
-            gh_scope = user_info.pop("scope", "")
-            await secrets.set("github_oauth_token", access_token)
-            logger.info("Persisted GitHub OAuth token (scope: {})", gh_scope)
-        return {"token": token, **user_info}
 
     @router.post("/config/key")
     async def admin_update_config_key(body: ConfigUpdateRequest, request: Request):

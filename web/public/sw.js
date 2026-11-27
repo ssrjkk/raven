@@ -1,11 +1,11 @@
-const CACHE = "raven-v3";
+const CACHE = "raven-v4";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
   "/manifest.json",
   "/offline.html",
 ];
-const API_CACHE = "raven-api-v1";
+const API_CACHE = "raven-api-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

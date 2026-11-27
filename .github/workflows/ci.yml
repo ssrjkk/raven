@@ -165,7 +165,11 @@ jobs:
         run: npm ci
 
       - name: Install browsers
-        run: npx playwright install --with-deps
+        run: |
+          for source in /etc/apt/sources.list.d/microsoft*.list; do
+            if [ -f "$source" ]; then sudo mv "$source" "/tmp/$(basename "$source")"; fi
+          done
+          npx playwright install --with-deps
 
       # The specs drive `vite preview` over the built bundle (playwright.config.ts webServer), so this
       # job needs no gateway: every /api and /ws call is stubbed in web/e2e/support.ts. Before it, the

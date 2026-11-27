@@ -51,6 +51,10 @@ def _make_full_app() -> FastAPI:
     async def login() -> dict[str, str]:
         return {"ok": "login"}
 
+    @app.get("/api/auth/oauth/providers")
+    async def oauth_providers() -> dict[str, list[str]]:
+        return {"providers": []}
+
     @app.post("/api/webhooks/generic")
     async def webhook() -> dict[str, str]:
         return {"ok": "webhook"}
@@ -209,6 +213,12 @@ class TestApiMutationGuard:
     def test_auth_login_public(self) -> None:
         client = TestClient(_make_full_app())
         assert client.post("/api/auth/login").status_code == 200
+
+    def test_oauth_provider_discovery_is_public(self) -> None:
+        client = TestClient(_make_full_app())
+        response = client.get("/api/auth/oauth/providers")
+        assert response.status_code == 200
+        assert response.json() == {"providers": []}
 
     def test_webhooks_public(self) -> None:
         client = TestClient(_make_full_app())

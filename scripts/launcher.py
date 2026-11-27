@@ -55,11 +55,24 @@ def _open_browser(url: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Raven Desktop — gateway + web UI")
+    parser = argparse.ArgumentParser(description="Raven Desktop — gateway + web UI", add_help=False)
+    parser.add_argument("--help", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=None, help="Web UI port (default: 18888)")
     parser.add_argument("--no-browser", action="store_true", help="Do not auto-open the browser")
     parser.add_argument("--ghost", action="store_true", help="100% offline mode (local LLM only)")
     args = parser.parse_args()
+
+    if args.help:
+        print(
+            "usage: Raven.exe [--port PORT] [--no-browser] [--ghost]\n\n"
+            "Raven Desktop - gateway + web UI\n\n"
+            "options:\n"
+            "  --port PORT     Web UI port (default: 18888)\n"
+            "  --no-browser    Do not auto-open the browser\n"
+            "  --ghost         100% offline mode (local LLM only)\n"
+            "  --help          Show this help message"
+        )
+        return 0
 
     data_dir = _resolve_data_dir()
     _configure_env(data_dir)

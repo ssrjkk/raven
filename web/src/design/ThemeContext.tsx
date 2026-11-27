@@ -48,11 +48,6 @@ function safeSetItem(key: string, value: string) {
 function getInitialTheme(): Theme {
   const stored = safeGetItem("raven-theme");
   if (stored === "light" || stored === "dark" || stored === "midnight") return stored;
-  try {
-    if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
-  } catch (e) { console.error("ThemeContext:", e);
-    /* matchMedia not supported */
-  }
   return "dark";
 }
 

@@ -34,6 +34,11 @@ export function useCommands(onToggleTheme?: () => void) {
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
+    if (!getToken()) {
+      setCommands([]);
+      setIsLoading(false);
+      return () => ac.abort();
+    }
 
     const fetchCommands = async () => {
       setIsLoading(true);
